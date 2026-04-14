@@ -72,8 +72,11 @@ interface ActiveTurnoversProps {
 
 export default function ActiveTurnovers({ tvMode }: ActiveTurnoversProps) {
   const { data, isLoading } = useTurnovers("active", 50);
+  const EXCLUDED_STATUSES = ["owner", "listed for sale"];
   const turnovers = (data?.turnovers ?? []).filter(
-    (t) => t.key_turnin_date !== null
+    (t) =>
+      t.key_turnin_date !== null &&
+      !EXCLUDED_STATUSES.includes((t.status ?? "").toLowerCase())
   );
 
   return (
