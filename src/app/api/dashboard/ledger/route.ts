@@ -17,6 +17,7 @@ export async function GET(request: Request) {
     let query = supabaseAdmin
       .from("incentive_ledger")
       .select("*", { count: "exact" })
+      .neq("amount", 0)
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
