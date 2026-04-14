@@ -11,7 +11,7 @@ import {
 import { useTvMode } from "@/hooks/use-tv-mode";
 import { useAudio } from "@/hooks/use-audio";
 import Jar from "./Jar";
-import ActiveTurnovers from "./ActiveTurnovers";
+import ActiveTurnovers, { ComingSoon } from "./ActiveTurnovers";
 import RecentCompletions from "./RecentCompletions";
 import LedgerHistory from "./LedgerHistory";
 import Toasts from "./Toast";
@@ -196,19 +196,22 @@ export default function Dashboard() {
           className={
             tvMode
               ? "mt-8 max-w-4xl mx-auto"
-              : "mt-10 grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto"
+              : "mt-10 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-[90rem] mx-auto"
           }
         >
-          <div className="lg:col-span-1">
+          <div>
             <ActiveTurnovers tvMode={tvMode} />
           </div>
 
           {!tvMode && (
             <>
-              <div className="lg:col-span-1">
+              <div>
+                <ComingSoon tvMode={tvMode} />
+              </div>
+              <div>
                 <RecentCompletions />
               </div>
-              <div className="lg:col-span-1">
+              <div>
                 <LedgerHistory />
               </div>
             </>

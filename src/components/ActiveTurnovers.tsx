@@ -40,7 +40,6 @@ function getThreshold(type: string | null): number {
 function getStatusColor(days: number | null, type: string | null): string {
   if (days === null) return "bg-gray-500";
   const threshold = getThreshold(type);
-
   if (days <= threshold * 0.6) return "bg-emerald-500";
   if (days <= threshold * 0.85) return "bg-amber-500";
   return "bg-red-500";
@@ -49,7 +48,6 @@ function getStatusColor(days: number | null, type: string | null): string {
 function getStatusRing(days: number | null, type: string | null): string {
   if (days === null) return "ring-gray-500/30";
   const threshold = getThreshold(type);
-
   if (days <= threshold * 0.6) return "ring-emerald-500/30";
   if (days <= threshold * 0.85) return "ring-amber-500/30";
   return "ring-red-500/30";
@@ -117,11 +115,11 @@ function ComingSoonRow({ turnover, tvMode }: { turnover: Turnover; tvMode?: bool
   );
 }
 
-interface ActiveTurnoversProps {
+interface PanelProps {
   tvMode?: boolean;
 }
 
-export default function ActiveTurnovers({ tvMode }: ActiveTurnoversProps) {
+export function useActiveTurnoverData() {
   const { data, isLoading } = useTurnovers("active", 50);
   const allTurnovers = data?.turnovers ?? [];
 
@@ -142,45 +140,53 @@ export default function ActiveTurnovers({ tvMode }: ActiveTurnoversProps) {
       return a.key_turnin_date.localeCompare(b.key_turnin_date);
     });
 
+  return { active, comingSoon, isLoading };
+}
+
+export default function ActiveTurnovers({ tvMode }: PanelProps) {
+  const { active, isLoading } = useActiveTurnoverData();
   const sectionHeader = tvMode ? "text-xl" : "text-sm";
 
   return (
-    <div className="space-y-6">
-      {/* Active Turnovers */}
-      <div className="space-y-2">
-        <h2 className={`font-semibold text-gray-400 uppercase tracking-wider ${sectionHeader}`}>
-          Active Turnovers
-        </h2>
-        {isLoading ? (
-          <div className="space-y-2">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-10 bg-white/5 animate-pulse rounded-lg" />
-            ))}
-          </div>
-        ) : active.length === 0 ? (
-          <p className="text-gray-600 text-sm py-4">No active turnovers</p>
-        ) : (
-          <div className="space-y-1">
-            {active.map((t) => (
-              <TurnoverRow key={t.id} turnover={t} tvMode={tvMode} />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Coming Soon */}
-      {comingSoon.length > 0 && (
+    <div className="space-y-2">
+      <h2 className={`font-semibold text-gray-400 uppercase tracking-wider ${sectionHeader}`}>
+        Active Turnovers
+      </h2>
+      {isLoading ? (
         <div className="space-y-2">
-          <h2 className={`font-semibold text-purple-400/70 uppercase tracking-wider ${sectionHeader}`}>
-            Coming Soon
-          </h2>
-          <div className="space-y-1">
-            {comingSoon.map((t) => (
-              <ComingSoonRow key={t.id} turnover={t} tvMode={tvMode} />
-            ))}
-          </div>
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-10 bg-white/5 animate-pulse rounded-lg" />
+          ))}
+        </div>
+      ) : active.length === 0 ? (
+        <p className="text-gray-600 text-sm py-4">No active turnovers</p>
+      ) : (
+        <div className="space-y-1">
+          {active.map((t) => (
+            <TurnoverRow key={t.id} turnover={t} tvMode={tvMode} />
+          ))}
         </div>
       )}
+    </div>
+  );
+}
+
+export function ComingSoon({ tvMode }: PanelProps) {
+  const { comingSoon } = useActiveTurnoverData();
+  const sectionHeader = tvMode ? "text-xl" : "text-sm";
+
+  if (comingSoon.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <h2 className={`font-semibold text-purple-400/70 uppercase tracking-wider ${sectionHeader}`}>
+        Coming Soon
+      </h2>
+      <div className="space-y-1">
+        {comingSoon.map((t) => (
+          <ComingSoonRow key={t.id} turnover={t} tvMode={tvMode} />
+        ))}
+      </div>
     </div>
   );
 }
