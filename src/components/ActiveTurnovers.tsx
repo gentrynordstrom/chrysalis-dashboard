@@ -6,7 +6,8 @@ function getDaysElapsed(dateStr: string | null): number | null {
   if (!dateStr) return null;
   const start = new Date(dateStr);
   const now = new Date();
-  return Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  const days = Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  return days < 0 ? null : days;
 }
 
 function getThreshold(type: string | null): number {
@@ -70,8 +71,10 @@ interface ActiveTurnoversProps {
 }
 
 export default function ActiveTurnovers({ tvMode }: ActiveTurnoversProps) {
-  const { data, isLoading } = useTurnovers("active", 20);
-  const turnovers = data?.turnovers ?? [];
+  const { data, isLoading } = useTurnovers("active", 50);
+  const turnovers = (data?.turnovers ?? []).filter(
+    (t) => t.key_turnin_date !== null
+  );
 
   return (
     <div className="space-y-2">
