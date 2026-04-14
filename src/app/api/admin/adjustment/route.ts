@@ -33,7 +33,7 @@ export async function POST(request: Request) {
         reason: reason.trim(),
         source_type: "adjustment",
         source_id: null,
-        new_since_last_display: false,
+        new_since_last_display: true,
       })
       .select()
       .single();
