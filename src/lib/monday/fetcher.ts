@@ -2,14 +2,20 @@ import { mondayQuery } from "./client";
 import { buildTurnoverQuery, buildWorkOrderQuery } from "./queries";
 import type { MondayBoardsResponse, MondayItem } from "./types";
 
-/**
- * Fetches all items from a Monday.com board, handling cursor-based pagination.
- */
+interface FetchOptions {
+  maxPages?: number;
+}
+
 async function fetchAllItems(
-  buildQuery: (cursor?: string) => { query: string; variables: Record<string, unknown> }
+  buildQuery: (cursor?: string) => {
+    query: string;
+    variables: Record<string, unknown>;
+  },
+  options: FetchOptions = {}
 ): Promise<MondayItem[]> {
   const allItems: MondayItem[] = [];
   let cursor: string | undefined;
+  let pageCount = 0;
 
   do {
     const { query, variables } = buildQuery(cursor);
@@ -20,15 +26,27 @@ async function fetchAllItems(
 
     allItems.push(...page.items);
     cursor = page.cursor ?? undefined;
+    pageCount++;
+
+    if (options.maxPages && pageCount >= options.maxPages) {
+      console.log(
+        `Reached max pages (${options.maxPages}), fetched ${allItems.length} items so far`
+      );
+      break;
+    }
   } while (cursor);
 
   return allItems;
 }
 
-export async function fetchAllTurnovers(): Promise<MondayItem[]> {
-  return fetchAllItems(buildTurnoverQuery);
+export async function fetchAllTurnovers(
+  options?: FetchOptions
+): Promise<MondayItem[]> {
+  return fetchAllItems(buildTurnoverQuery, options);
 }
 
-export async function fetchAllWorkOrders(): Promise<MondayItem[]> {
-  return fetchAllItems(buildWorkOrderQuery);
+export async function fetchAllWorkOrders(
+  options?: FetchOptions
+): Promise<MondayItem[]> {
+  return fetchAllItems(buildWorkOrderQuery, options);
 }

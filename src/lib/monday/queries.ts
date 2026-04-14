@@ -62,7 +62,7 @@ export function buildWorkOrderQuery(cursor?: string) {
     return {
       query: `query ($boardId: [ID!]!, $cursor: String!) {
         boards(ids: $boardId) {
-          items_page(limit: 100, cursor: $cursor) {
+          items_page(limit: 25, cursor: $cursor) {
             cursor
             items {
               id
@@ -94,7 +94,7 @@ export function buildWorkOrderQuery(cursor?: string) {
   return {
     query: `query ($boardId: [ID!]!) {
       boards(ids: $boardId) {
-        items_page(limit: 100) {
+        items_page(limit: 25) {
           cursor
           items {
             id

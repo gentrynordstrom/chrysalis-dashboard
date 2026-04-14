@@ -64,7 +64,7 @@ export async function runFullSync(
   if (syncWorkOrders) {
     await updateDataSource("monday_work_orders", "syncing");
     try {
-      const mondayWorkOrders = await fetchAllWorkOrders();
+      const mondayWorkOrders = await fetchAllWorkOrders({ maxPages: 20 });
       console.log(
         `Fetched ${mondayWorkOrders.length} work orders from Monday`
       );
