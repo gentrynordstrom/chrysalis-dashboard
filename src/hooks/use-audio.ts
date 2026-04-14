@@ -2,80 +2,84 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 
-function playCoinSound(ctx: AudioContext, volume: number) {
-  const now = ctx.currentTime;
-  const gain = ctx.createGain();
-  gain.connect(ctx.destination);
-  gain.gain.setValueAtTime(volume * 0.4, now);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
-
-  // Two-tone "coin" chime: C6 then E6
-  const freqs = [1047, 1319];
-  freqs.forEach((freq, i) => {
-    const osc = ctx.createOscillator();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(freq, now);
-    osc.connect(gain);
-    osc.start(now + i * 0.12);
-    osc.stop(now + 0.5 + i * 0.12);
-  });
-
-  // Soft shimmer overtone
-  const shimmer = ctx.createOscillator();
-  shimmer.type = "triangle";
-  shimmer.frequency.setValueAtTime(2637, now);
-  const shimmerGain = ctx.createGain();
-  shimmerGain.connect(ctx.destination);
-  shimmerGain.gain.setValueAtTime(volume * 0.08, now + 0.08);
-  shimmerGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-  shimmer.connect(shimmerGain);
-  shimmer.start(now + 0.08);
-  shimmer.stop(now + 0.4);
-}
-
 export function useAudio() {
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(0.7);
+  const [ready, setReady] = useState(false);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioBufferRef = useRef<AudioBuffer | null>(null);
 
-  function getCtx(): AudioContext {
+  const ensureReady = useCallback(async () => {
     if (!audioCtxRef.current) {
       audioCtxRef.current = new AudioContext();
     }
-    return audioCtxRef.current;
-  }
+    const ctx = audioCtxRef.current;
+    if (ctx.state === "suspended") {
+      await ctx.resume();
+    }
 
-  // Resume audio context on any user interaction
-  useEffect(() => {
-    const resume = () => {
-      const ctx = audioCtxRef.current;
-      if (ctx?.state === "suspended") {
-        ctx.resume();
+    if (!audioBufferRef.current && ctx.state === "running") {
+      try {
+        const response = await fetch("/sounds/coin.mp3");
+        const arrayBuffer = await response.arrayBuffer();
+        audioBufferRef.current = await ctx.decodeAudioData(arrayBuffer);
+      } catch {
+        // Will retry on next call
       }
-    };
-    window.addEventListener("click", resume);
-    window.addEventListener("keydown", resume);
-    window.addEventListener("touchstart", resume);
-    return () => {
-      window.removeEventListener("click", resume);
-      window.removeEventListener("keydown", resume);
-      window.removeEventListener("touchstart", resume);
-    };
+    }
+
+    if (ctx.state === "running") {
+      setReady(true);
+    }
+    return ctx.state === "running";
   }, []);
 
-  const playSound = useCallback(async () => {
-    if (muted) return;
+  useEffect(() => {
+    const handler = () => { ensureReady(); };
+    window.addEventListener("click", handler);
+    window.addEventListener("keydown", handler);
+    window.addEventListener("touchstart", handler);
+    return () => {
+      window.removeEventListener("click", handler);
+      window.removeEventListener("keydown", handler);
+      window.removeEventListener("touchstart", handler);
+    };
+  }, [ensureReady]);
+
+  const playSound = useCallback(async (): Promise<boolean> => {
+    if (muted) return true;
 
     try {
-      const ctx = getCtx();
+      const ctx = audioCtxRef.current ?? new AudioContext();
+      audioCtxRef.current = ctx;
+
       if (ctx.state === "suspended") {
         await ctx.resume();
       }
-      playCoinSound(ctx, volume);
+      if (ctx.state !== "running") {
+        return false;
+      }
+
+      if (!audioBufferRef.current) {
+        const response = await fetch("/sounds/coin.mp3");
+        const arrayBuffer = await response.arrayBuffer();
+        audioBufferRef.current = await ctx.decodeAudioData(arrayBuffer);
+      }
+
+      const source = ctx.createBufferSource();
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = volume;
+      source.buffer = audioBufferRef.current;
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      source.start(0);
+
+      setReady(true);
+      return true;
     } catch {
-      // Silently fail if audio isn't available
+      return false;
     }
   }, [muted, volume]);
 
-  return { muted, setMuted, volume, setVolume, playSound, unlocked: true };
+  return { muted, setMuted, volume, setVolume, playSound, ready, ensureReady };
 }

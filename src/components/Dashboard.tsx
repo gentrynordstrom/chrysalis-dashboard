@@ -27,7 +27,7 @@ interface ToastItem {
 
 export default function Dashboard() {
   const { tvMode, setTvMode, dimmed, resetActivity } = useTvMode();
-  const { playSound, muted, setMuted } = useAudio();
+  const { playSound, muted, setMuted, ready: audioReady, ensureReady } = useAudio();
 
   const refreshRate = tvMode ? 15000 : 30000;
   const { data: balances } = useBalances(refreshRate);
@@ -39,6 +39,8 @@ export default function Dashboard() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [animatingPot, setAnimatingPot] = useState<"office" | "tech" | null>(null);
   const processedIds = useRef(new Set<string>());
+  const pendingEntries = useRef<LedgerEntry[]>([]);
+  const [hasPending, setHasPending] = useState(false);
 
   const lastOfficeDeposit = ledgerData?.entries?.find(
     (e: LedgerEntry) => e.pot === "office" && e.amount > 0
@@ -47,18 +49,12 @@ export default function Dashboard() {
     (e: LedgerEntry) => e.pot === "tech" && e.amount > 0
   );
 
-  // Process new entries: show toasts, play sound, animate jars
-  const processNewEntries = useCallback(
+  const fireEntries = useCallback(
     async (entries: LedgerEntry[]) => {
-      const unprocessed = entries.filter(
-        (e) => !processedIds.current.has(e.id)
-      );
-      if (unprocessed.length === 0) return;
-
       const newToasts: ToastItem[] = [];
       const pots = new Set<"office" | "tech">();
 
-      for (const entry of unprocessed) {
+      for (const entry of entries) {
         processedIds.current.add(entry.id);
         if (entry.amount > 0) {
           newToasts.push({
@@ -84,10 +80,30 @@ export default function Dashboard() {
         setTimeout(() => setAnimatingPot(null), 2000);
       }
 
-      await markEntriesDisplayed(unprocessed.map((e) => e.id));
+      await markEntriesDisplayed(entries.map((e) => e.id));
       refreshNewEntries();
     },
     [playSound, resetActivity, refreshNewEntries]
+  );
+
+  // When new entries arrive, either fire immediately or queue them
+  const processNewEntries = useCallback(
+    async (entries: LedgerEntry[]) => {
+      const unprocessed = entries.filter(
+        (e) => !processedIds.current.has(e.id)
+      );
+      if (unprocessed.length === 0) return;
+
+      if (audioReady || muted) {
+        pendingEntries.current = [];
+        setHasPending(false);
+        await fireEntries(unprocessed);
+      } else {
+        pendingEntries.current = unprocessed;
+        setHasPending(true);
+      }
+    },
+    [audioReady, muted, fireEntries]
   );
 
   useEffect(() => {
@@ -97,18 +113,40 @@ export default function Dashboard() {
     }
   }, [newEntriesData, processNewEntries]);
 
+  // When audio becomes ready, flush any queued entries
+  useEffect(() => {
+    if ((audioReady || muted) && pendingEntries.current.length > 0) {
+      const pending = [...pendingEntries.current];
+      pendingEntries.current = [];
+      setHasPending(false);
+      fireEntries(pending);
+    }
+  }, [audioReady, muted, fireEntries]);
+
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  const handleRootClick = useCallback(() => {
+    resetActivity();
+    ensureReady();
+  }, [resetActivity, ensureReady]);
 
   return (
     <div
       className={`min-h-screen bg-gray-950 text-white transition-opacity duration-1000 ${
         dimmed ? "opacity-20" : "opacity-100"
       }`}
-      onClick={resetActivity}
+      onClick={handleRootClick}
     >
       <Toasts items={toasts} onDismiss={dismissToast} />
+
+      {/* Sound enable banner */}
+      {!audioReady && !muted && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center text-amber-400 text-sm cursor-pointer hover:bg-amber-500/15 transition-colors">
+          {hasPending ? "🔔 New deposit! Click anywhere to enable sound" : "Click anywhere to enable sound notifications"}
+        </div>
+      )}
 
       {/* Header */}
       {!tvMode && (
