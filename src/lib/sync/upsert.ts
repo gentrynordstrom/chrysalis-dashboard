@@ -80,13 +80,16 @@ export async function upsertWorkOrders(records: WorkOrderUpsert[]) {
   }
 
   const upsertRecords = records.map((r) => {
-    const { turnover_monday_item_id, ...rest } = r;
     return {
-      ...rest,
+      monday_item_id: r.monday_item_id,
+      tech_rating: r.tech_rating,
+      quality_rating: r.quality_rating,
+      assigned_tech: r.assigned_tech,
+      completion_date: r.completion_date,
       review_bonus:
         r.tech_rating === 5 && r.quality_rating === 5 ? 10.0 : 0,
-      turnover_id: turnover_monday_item_id
-        ? (turnoverIdMap.get(turnover_monday_item_id) ?? null)
+      turnover_id: r.turnover_monday_item_id
+        ? (turnoverIdMap.get(r.turnover_monday_item_id) ?? null)
         : null,
     };
   });
@@ -108,6 +111,34 @@ export async function upsertWorkOrders(records: WorkOrderUpsert[]) {
     }
 
     total += batch.length;
+  }
+
+  // Update linked turnovers with hours data for 20% kicker calculation
+  for (const r of records) {
+    if (
+      r.turnover_monday_item_id &&
+      (r.estimated_hours !== null || r.actual_hours !== null)
+    ) {
+      const turnoverUuid = turnoverIdMap.get(r.turnover_monday_item_id);
+      if (turnoverUuid) {
+        const hoursUpdate: Record<string, unknown> = {};
+        if (r.estimated_hours !== null)
+          hoursUpdate.estimated_hours = r.estimated_hours;
+        if (r.actual_hours !== null) hoursUpdate.actual_hours = r.actual_hours;
+        if (
+          r.actual_hours !== null &&
+          r.estimated_hours !== null &&
+          r.actual_hours <= r.estimated_hours
+        ) {
+          hoursUpdate.kicker_earned = true;
+        }
+
+        await supabaseAdmin
+          .from("turnovers")
+          .update(hoursUpdate)
+          .eq("id", turnoverUuid);
+      }
+    }
   }
 
   return { total };
