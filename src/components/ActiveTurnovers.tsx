@@ -2,12 +2,30 @@
 
 import { useTurnovers, type Turnover } from "@/hooks/use-dashboard";
 
+const EXCLUDED_STATUSES = ["owner", "listed for sale"];
+
 function getDaysElapsed(dateStr: string | null): number | null {
   if (!dateStr) return null;
   const start = new Date(dateStr);
   const now = new Date();
   const days = Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
   return days < 0 ? null : days;
+}
+
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function getDaysUntil(dateStr: string | null): number | null {
+  if (!dateStr) return null;
+  const target = new Date(dateStr + "T00:00:00");
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 function getThreshold(type: string | null): number {
@@ -66,37 +84,99 @@ function TurnoverRow({ turnover, tvMode }: { turnover: Turnover; tvMode?: boolea
   );
 }
 
+function ComingSoonRow({ turnover, tvMode }: { turnover: Turnover; tvMode?: boolean }) {
+  const daysUntil = getDaysUntil(turnover.key_turnin_date);
+  const dateLabel = formatDate(turnover.key_turnin_date);
+
+  const urgencyColor =
+    daysUntil === null ? "text-gray-500" :
+    daysUntil <= 0 ? "text-red-400" :
+    daysUntil <= 7 ? "text-amber-400" :
+    "text-gray-400";
+
+  const urgencyLabel =
+    daysUntil === null ? "" :
+    daysUntil <= 0 ? "now" :
+    `in ${daysUntil}d`;
+
+  return (
+    <div className={`flex items-center justify-between py-2.5 px-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] transition-colors ${tvMode ? "text-lg" : "text-sm"}`}>
+      <div className="flex items-center gap-3 min-w-0">
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-4 bg-purple-500 ring-purple-500/30" />
+        <span className="text-white truncate font-medium">
+          {turnover.unit_name ?? "Unknown"}
+        </span>
+      </div>
+      <div className="flex items-center gap-2 shrink-0 ml-3">
+        <span className="text-gray-400 text-xs">{dateLabel}</span>
+        <span className={`tabular-nums font-semibold ${urgencyColor}`}>
+          {urgencyLabel}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 interface ActiveTurnoversProps {
   tvMode?: boolean;
 }
 
 export default function ActiveTurnovers({ tvMode }: ActiveTurnoversProps) {
   const { data, isLoading } = useTurnovers("active", 50);
-  const EXCLUDED_STATUSES = ["owner", "listed for sale"];
-  const turnovers = (data?.turnovers ?? []).filter(
+  const allTurnovers = data?.turnovers ?? [];
+
+  const active = allTurnovers.filter(
     (t) =>
       t.key_turnin_date !== null &&
+      (t.status ?? "").toLowerCase() !== "default" &&
       !EXCLUDED_STATUSES.includes((t.status ?? "").toLowerCase())
   );
 
+  const comingSoon = allTurnovers
+    .filter((t) => (t.status ?? "").toLowerCase() === "default")
+    .sort((a, b) => {
+      if (!a.key_turnin_date) return 1;
+      if (!b.key_turnin_date) return -1;
+      return a.key_turnin_date.localeCompare(b.key_turnin_date);
+    });
+
+  const sectionHeader = tvMode ? "text-xl" : "text-sm";
+
   return (
-    <div className="space-y-2">
-      <h2 className={`font-semibold text-gray-400 uppercase tracking-wider ${tvMode ? "text-xl" : "text-sm"}`}>
-        Active Turnovers
-      </h2>
-      {isLoading ? (
+    <div className="space-y-6">
+      {/* Active Turnovers */}
+      <div className="space-y-2">
+        <h2 className={`font-semibold text-gray-400 uppercase tracking-wider ${sectionHeader}`}>
+          Active Turnovers
+        </h2>
+        {isLoading ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-10 bg-white/5 animate-pulse rounded-lg" />
+            ))}
+          </div>
+        ) : active.length === 0 ? (
+          <p className="text-gray-600 text-sm py-4">No active turnovers</p>
+        ) : (
+          <div className="space-y-1">
+            {active.map((t) => (
+              <TurnoverRow key={t.id} turnover={t} tvMode={tvMode} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Coming Soon */}
+      {comingSoon.length > 0 && (
         <div className="space-y-2">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-10 bg-white/5 animate-pulse rounded-lg" />
-          ))}
-        </div>
-      ) : turnovers.length === 0 ? (
-        <p className="text-gray-600 text-sm py-4">No active turnovers</p>
-      ) : (
-        <div className="space-y-1">
-          {turnovers.map((t) => (
-            <TurnoverRow key={t.id} turnover={t} tvMode={tvMode} />
-          ))}
+          <h2 className={`font-semibold text-purple-400/70 uppercase tracking-wider ${sectionHeader}`}>
+            Coming Soon
+          </h2>
+          <div className="space-y-1">
+            {comingSoon.map((t) => (
+              <ComingSoonRow key={t.id} turnover={t} tvMode={tvMode} />
+            ))}
+          </div>
         </div>
       )}
     </div>
