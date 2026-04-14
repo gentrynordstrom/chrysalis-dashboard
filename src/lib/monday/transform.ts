@@ -66,15 +66,19 @@ function extractRating(item: MondayItem, columnId: string): number | null {
   const cv = getColumnValue(item, columnId);
   if (!cv?.value) return null;
 
+  let rating: number | null = null;
   try {
     const parsed = JSON.parse(cv.value);
-    return typeof parsed.rating === "number" ? parsed.rating : null;
+    rating = typeof parsed.rating === "number" ? parsed.rating : null;
   } catch {
     const text = cv.text;
     if (!text) return null;
     const num = parseInt(text, 10);
-    return isNaN(num) ? null : num;
+    rating = isNaN(num) ? null : num;
   }
+
+  if (rating !== null && (rating < 1 || rating > 5)) return null;
+  return rating;
 }
 
 function extractBoolean(item: MondayItem, columnId: string): boolean {
