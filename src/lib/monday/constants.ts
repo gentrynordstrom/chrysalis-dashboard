@@ -27,6 +27,7 @@ export const TURNOVER_COLUMNS = {
 export const WORK_ORDER_COLUMNS = {
   tech_rating: "rating__1",
   quality_rating: "rating_2__1",
+  review_comment: "long_text4__1",
   bill_created_date: "date_mkttd013",
   estimated_hours: "numeric_mkqgs9kp",
   actual_hours: "subitems_total_time7__1",

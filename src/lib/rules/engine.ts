@@ -205,10 +205,14 @@ async function evaluateReviewPot(): Promise<LedgerInsert[]> {
   for (const review of reviews) {
     if (existingReviewIds.has(review.id)) continue;
 
+    const parts = ["5-star review"];
+    if (review.assigned_tech) parts.push(`- ${review.assigned_tech}`);
+    if (review.review_comment) parts.push(`"${review.review_comment}"`);
+
     entries.push({
       pot: "tech",
       amount: 5.0,
-      reason: `5-star review${review.assigned_tech ? ` - ${review.assigned_tech}` : ""}`,
+      reason: parts.join(" "),
       source_type: "review",
       source_id: review.id,
     });

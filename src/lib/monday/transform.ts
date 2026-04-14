@@ -25,6 +25,7 @@ interface WorkOrderRecord {
   monday_item_id: number;
   tech_rating: number | null;
   quality_rating: number | null;
+  review_comment: string | null;
   assigned_tech: string | null;
   completion_date: string | null;
   estimated_hours: number | null;
@@ -198,11 +199,30 @@ export function transformTurnover(item: MondayItem): TurnoverRecord {
   };
 }
 
+function extractLongText(item: MondayItem, columnId: string): string | null {
+  const cv = getColumnValue(item, columnId);
+  if (!cv) return null;
+
+  if (cv.text) return cv.text.trim() || null;
+
+  if (cv.value) {
+    try {
+      const parsed = JSON.parse(cv.value);
+      return parsed.text?.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 export function transformWorkOrder(item: MondayItem): WorkOrderRecord {
   return {
     monday_item_id: Number(item.id),
     tech_rating: extractRating(item, WORK_ORDER_COLUMNS.tech_rating),
     quality_rating: extractRating(item, WORK_ORDER_COLUMNS.quality_rating),
+    review_comment: extractLongText(item, WORK_ORDER_COLUMNS.review_comment),
     assigned_tech: extractPeopleName(item, WORK_ORDER_COLUMNS.assigned_tech),
     completion_date: extractDate(item, WORK_ORDER_COLUMNS.completion_date),
     estimated_hours: extractNumber(item, WORK_ORDER_COLUMNS.estimated_hours),

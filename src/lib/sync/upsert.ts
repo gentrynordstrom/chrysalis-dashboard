@@ -19,6 +19,7 @@ interface WorkOrderUpsert {
   monday_item_id: number;
   tech_rating: number | null;
   quality_rating: number | null;
+  review_comment: string | null;
   assigned_tech: string | null;
   completion_date: string | null;
   estimated_hours: number | null;
@@ -84,6 +85,7 @@ export async function upsertWorkOrders(records: WorkOrderUpsert[]) {
       monday_item_id: r.monday_item_id,
       tech_rating: r.tech_rating,
       quality_rating: r.quality_rating,
+      review_comment: r.review_comment,
       assigned_tech: r.assigned_tech,
       completion_date: r.completion_date,
       review_bonus:
