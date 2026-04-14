@@ -125,12 +125,14 @@ export default function ActiveTurnovers({ tvMode }: ActiveTurnoversProps) {
   const { data, isLoading } = useTurnovers("active", 50);
   const allTurnovers = data?.turnovers ?? [];
 
-  const active = allTurnovers.filter(
-    (t) =>
-      t.key_turnin_date !== null &&
-      (t.status ?? "").toLowerCase() !== "default" &&
-      !EXCLUDED_STATUSES.includes((t.status ?? "").toLowerCase())
-  );
+  const active = allTurnovers
+    .filter(
+      (t) =>
+        t.key_turnin_date !== null &&
+        (t.status ?? "").toLowerCase() !== "default" &&
+        !EXCLUDED_STATUSES.includes((t.status ?? "").toLowerCase())
+    )
+    .sort((a, b) => (a.key_turnin_date ?? "").localeCompare(b.key_turnin_date ?? ""));
 
   const comingSoon = allTurnovers
     .filter((t) => (t.status ?? "").toLowerCase() === "default")
