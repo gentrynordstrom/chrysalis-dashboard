@@ -176,7 +176,7 @@ async function evaluateTechTurnoverPot(
 
 /**
  * Evaluates 5-star review bonuses. Both tech_rating and quality_rating
- * must be 5 for the $10 bonus to apply.
+ * must be 5 for the $5 bonus to apply.
  */
 async function evaluateReviewPot(): Promise<LedgerInsert[]> {
   const { data: reviews, error } = await supabaseAdmin
@@ -207,7 +207,7 @@ async function evaluateReviewPot(): Promise<LedgerInsert[]> {
 
     entries.push({
       pot: "tech",
-      amount: 10.0,
+      amount: 5.0,
       reason: `5-star review${review.assigned_tech ? ` - ${review.assigned_tech}` : ""}`,
       source_type: "review",
       source_id: review.id,

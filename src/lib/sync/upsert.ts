@@ -87,7 +87,7 @@ export async function upsertWorkOrders(records: WorkOrderUpsert[]) {
       assigned_tech: r.assigned_tech,
       completion_date: r.completion_date,
       review_bonus:
-        r.tech_rating === 5 && r.quality_rating === 5 ? 10.0 : 0,
+        r.tech_rating === 5 && r.quality_rating === 5 ? 5.0 : 0,
       turnover_id: r.turnover_monday_item_id
         ? (turnoverIdMap.get(r.turnover_monday_item_id) ?? null)
         : null,
