@@ -122,7 +122,8 @@ export default function AdminPage() {
       </header>
 
       <main className="px-6 py-8 max-w-5xl mx-auto space-y-10">
-        <WithdrawalSection />
+        <TransactionSection />
+        <LedgerManagement />
         <ConfigSection />
         <SyncSection />
       </main>
@@ -130,19 +131,23 @@ export default function AdminPage() {
   );
 }
 
-function WithdrawalSection() {
+function TransactionSection() {
+  const [mode, setMode] = useState<"withdrawal" | "deposit">("withdrawal");
   const [pot, setPot] = useState<"office" | "tech">("office");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ success?: boolean; error?: string } | null>(null);
+  const [result, setResult] = useState<{ success?: boolean; error?: string; message?: string } | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setResult(null);
 
-    const res = await fetch("/api/admin/withdrawal", {
+    const endpoint =
+      mode === "withdrawal" ? "/api/admin/withdrawal" : "/api/admin/adjustment";
+
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -156,7 +161,8 @@ function WithdrawalSection() {
     setSubmitting(false);
 
     if (res.ok) {
-      setResult({ success: true });
+      const label = mode === "withdrawal" ? "Withdrawal" : "Deposit";
+      setResult({ success: true, message: `${label} of $${parseFloat(amount).toFixed(2)} recorded` });
       setAmount("");
       setReason("");
     } else {
@@ -167,12 +173,39 @@ function WithdrawalSection() {
   return (
     <section>
       <h2 className="text-lg font-semibold text-gray-200 mb-4">
-        Record Withdrawal / Spending
+        Manual Transaction
       </h2>
       <form
         onSubmit={handleSubmit}
         className="bg-white/[0.03] border border-white/5 rounded-xl p-5 space-y-4"
       >
+        <div>
+          <label className="block text-sm text-gray-400 mb-1.5">Type</label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setMode("withdrawal")}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                mode === "withdrawal"
+                  ? "bg-red-600 text-white"
+                  : "bg-white/5 text-gray-400 hover:bg-white/10"
+              }`}
+            >
+              Withdrawal (spend from pot)
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("deposit")}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                mode === "deposit"
+                  ? "bg-emerald-600 text-white"
+                  : "bg-white/5 text-gray-400 hover:bg-white/10"
+              }`}
+            >
+              Deposit (add to pot)
+            </button>
+          </div>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm text-gray-400 mb-1.5">Pot</label>
@@ -221,7 +254,7 @@ function WithdrawalSection() {
             type="text"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="Team dinner at Lodi Tap House"
+            placeholder={mode === "withdrawal" ? "Team dinner at Lodi Tap House" : "Holiday bonus top-up"}
             required
             className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
           />
@@ -229,7 +262,7 @@ function WithdrawalSection() {
         <div className="flex items-center justify-between">
           <div>
             {result?.success && (
-              <span className="text-emerald-400 text-sm">Withdrawal recorded</span>
+              <span className="text-emerald-400 text-sm">{result.message}</span>
             )}
             {result?.error && (
               <span className="text-red-400 text-sm">{result.error}</span>
@@ -238,12 +271,164 @@ function WithdrawalSection() {
           <button
             type="submit"
             disabled={submitting}
-            className="bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
+            className={`${
+              mode === "withdrawal"
+                ? "bg-red-600 hover:bg-red-500"
+                : "bg-emerald-600 hover:bg-emerald-500"
+            } disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-lg transition-colors`}
           >
-            {submitting ? "Submitting..." : "Record Withdrawal"}
+            {submitting
+              ? "Submitting..."
+              : mode === "withdrawal"
+              ? "Record Withdrawal"
+              : "Record Deposit"}
           </button>
         </div>
       </form>
+    </section>
+  );
+}
+
+interface LedgerRow {
+  id: string;
+  pot: string;
+  amount: number;
+  reason: string;
+  source_type: string;
+  created_at: string;
+}
+
+function LedgerManagement() {
+  const [entries, setEntries] = useState<LedgerRow[]>([]);
+  const [loadingLedger, setLoadingLedger] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  const loadEntries = useCallback(async () => {
+    const res = await fetch("/api/admin/ledger?limit=100");
+    if (res.ok) {
+      const data = await res.json();
+      setEntries(data.entries ?? []);
+    }
+    setLoadingLedger(false);
+  }, []);
+
+  useEffect(() => {
+    loadEntries();
+  }, [loadEntries]);
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    const res = await fetch("/api/admin/ledger", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+
+    if (res.ok) {
+      setEntries((prev) => prev.filter((e) => e.id !== id));
+    }
+    setDeletingId(null);
+    setConfirmId(null);
+  }
+
+  function formatDate(iso: string): string {
+    return new Date(iso).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  function sourceLabel(type: string): string {
+    switch (type) {
+      case "turnover": return "Turnover";
+      case "review": return "Review";
+      case "manual_withdrawal": return "Withdrawal";
+      case "adjustment": return "Adjustment";
+      default: return type;
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="text-lg font-semibold text-gray-200 mb-4">
+        Ledger Entries
+      </h2>
+      <div className="bg-white/[0.03] border border-white/5 rounded-xl p-5">
+        {loadingLedger ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-9 bg-white/5 animate-pulse rounded" />
+            ))}
+          </div>
+        ) : entries.length === 0 ? (
+          <p className="text-gray-600 text-sm py-4">No ledger entries</p>
+        ) : (
+          <div className="space-y-1 max-h-[500px] overflow-y-auto pr-1">
+            {entries.map((e) => (
+              <div
+                key={e.id}
+                className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] transition-colors text-sm group"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <span
+                    className={`shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                      e.pot === "office"
+                        ? "bg-blue-500/20 text-blue-400"
+                        : "bg-amber-500/20 text-amber-400"
+                    }`}
+                  >
+                    {e.pot === "office" ? "O" : "T"}
+                  </span>
+                  <span className="text-gray-300 truncate">{e.reason}</span>
+                </div>
+                <div className="flex items-center gap-3 shrink-0 ml-3">
+                  <span className="text-gray-600 text-xs">
+                    {sourceLabel(e.source_type)}
+                  </span>
+                  <span
+                    className={`tabular-nums font-semibold w-16 text-right ${
+                      e.amount > 0 ? "text-emerald-400" : "text-red-400"
+                    }`}
+                  >
+                    {e.amount > 0 ? "+" : ""}${Math.abs(e.amount).toFixed(0)}
+                  </span>
+                  <span className="text-gray-600 text-xs w-28 text-right">
+                    {formatDate(e.created_at)}
+                  </span>
+                  {confirmId === e.id ? (
+                    <div className="flex items-center gap-1 w-20 justify-end">
+                      <button
+                        onClick={() => handleDelete(e.id)}
+                        disabled={deletingId === e.id}
+                        className="text-red-400 hover:text-red-300 text-xs px-1.5 py-0.5 font-medium"
+                      >
+                        {deletingId === e.id ? "..." : "Yes"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmId(null)}
+                        className="text-gray-500 hover:text-gray-300 text-xs px-1.5 py-0.5"
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmId(e.id)}
+                      className="text-gray-700 hover:text-red-400 transition-colors text-xs w-20 text-right opacity-0 group-hover:opacity-100"
+                      title="Delete entry"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
