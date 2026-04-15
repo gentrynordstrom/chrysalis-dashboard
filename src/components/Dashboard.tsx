@@ -164,6 +164,12 @@ export default function Dashboard() {
             >
               {muted ? "🔇" : "🔊"}
             </button>
+            <Link
+              href="/rules"
+              className="text-xs text-gray-500 hover:text-gray-300 border border-gray-700 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              How It Works
+            </Link>
             <button
               onClick={() => setTvMode(true)}
               className="text-xs text-gray-500 hover:text-gray-300 border border-gray-700 px-3 py-1.5 rounded-lg transition-colors"
