@@ -24,21 +24,41 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const unit = url.searchParams.get("unit")?.trim();
+  const targetId = url.searchParams.get("id")?.trim();
 
-  if (!unit) {
+  if (!unit && !targetId) {
     return NextResponse.json(
-      { error: "Missing ?unit= query parameter" },
+      { error: "Missing ?unit= or ?id= query parameter" },
       { status: 400 }
     );
   }
 
-  // Fuzzy-match the turnover by unit_name
-  const { data: turnovers, error: lookupErr } = await supabaseAdmin
-    .from("turnovers")
-    .select("*")
-    .ilike("unit_name", `%${unit}%`)
-    .order("created_at", { ascending: false })
-    .limit(5);
+  let turnovers: Record<string, unknown>[] | null = null;
+  let lookupErr: { message: string } | null = null;
+
+  if (targetId) {
+    // Target a specific turnover by UUID
+    const result = await supabaseAdmin
+      .from("turnovers")
+      .select("*")
+      .eq("id", targetId)
+      .limit(1);
+    turnovers = result.data;
+    lookupErr = result.error;
+  } else {
+    // Fuzzy-match by unit name. Order so the most recently active turnover
+    // (most recent work_start_date, then key_turnin_date, then created_at) is first.
+    const result = await supabaseAdmin
+      .from("turnovers")
+      .select("*")
+      .ilike("unit_name", `%${unit!}%`)
+      .order("work_start_date", { ascending: false, nullsFirst: false })
+      .order("key_turnin_date", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false })
+      .limit(5);
+    turnovers = result.data;
+    lookupErr = result.error;
+  }
 
   if (lookupErr) {
     return NextResponse.json({ error: lookupErr.message }, { status: 500 });
@@ -46,12 +66,12 @@ export async function GET(request: Request) {
 
   if (!turnovers?.length) {
     return NextResponse.json(
-      { error: `No turnovers found matching "${unit}"`, matches: [] },
+      { error: `No turnovers found matching "${unit ?? targetId}"`, matches: [] },
       { status: 404 }
     );
   }
 
-  const turnover = turnovers[0];
+  const turnover = turnovers[0] as Record<string, unknown>;
 
   // Load the incentive_config for this turnover's type
   let configThreshold: number | null = null;
@@ -154,6 +174,8 @@ export async function GET(request: Request) {
       is_billed: turnover.is_billed,
       key_turnin_date: turnover.key_turnin_date,
       deposit_received_date: turnover.deposit_received_date,
+      work_start_date: turnover.work_start_date,
+      work_completion_date: turnover.work_completion_date,
       office_days: turnover.office_days,
       office_incentive_amount: turnover.office_incentive_amount,
       status: turnover.status,
@@ -165,12 +187,15 @@ export async function GET(request: Request) {
     conditions,
     allPassed,
     existingLedgerEntry: existingEntry ?? null,
-    otherMatches:
-      turnovers.length > 1
-        ? turnovers.slice(1).map((t) => ({
-            id: t.id,
-            unit_name: t.unit_name,
-          }))
-        : [],
+    // All turnovers matching this unit name, sorted most-recent-first.
+    // The first entry is the one being diagnosed above.
+    allMatches: turnovers.map((t: Record<string, unknown>, i: number) => ({
+      id: t.id,
+      unit_name: t.unit_name,
+      work_start_date: t.work_start_date ?? null,
+      key_turnin_date: t.key_turnin_date ?? null,
+      status: t.status ?? null,
+      isCurrent: i === 0,
+    })),
   });
 }

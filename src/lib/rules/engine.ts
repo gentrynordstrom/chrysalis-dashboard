@@ -45,12 +45,43 @@ async function getExistingLedgerSourceIds(
 }
 
 /**
+ * When multiple turnovers share the same unit_name (repeat turnovers at the
+ * same address), only the most recently active one should be evaluated.
+ * "Most recent" is determined by key_turnin_date, falling back to created_at.
+ */
+function deduplicateByUnit<T extends { id: string; unit_name: string | null; key_turnin_date?: string | null; work_start_date?: string | null; created_at: string }>(
+  turnovers: T[],
+  dateField: "key_turnin_date" | "work_start_date"
+): T[] {
+  const mostRecent = new Map<string, T>();
+
+  for (const t of turnovers) {
+    const key = (t.unit_name ?? t.id).toLowerCase().trim();
+    const existing = mostRecent.get(key);
+    if (!existing) {
+      mostRecent.set(key, t);
+    } else {
+      const newDate: string = (t[dateField] as string | null | undefined) ?? t.created_at;
+      const existingDate: string = (existing[dateField] as string | null | undefined) ?? existing.created_at;
+      if (newDate > existingDate) {
+        mostRecent.set(key, t);
+      }
+    }
+  }
+
+  return Array.from(mostRecent.values());
+}
+
+/**
  * Evaluates the office pot for all turnovers where deposit_status = "deposit received"
  * and is_billed = true. Creates ledger entries for qualifying turnovers that
  * haven't been recorded yet.
+ *
+ * When the same address has multiple turnovers (repeat cycles), only the most
+ * recent one (by key_turnin_date) is evaluated to prevent stale entries.
  */
 async function evaluateOfficePot(config: ConfigMap): Promise<LedgerInsert[]> {
-  const { data: turnovers, error } = await supabaseAdmin
+  const { data: rawTurnovers, error } = await supabaseAdmin
     .from("turnovers")
     .select("*")
     .ilike("deposit_status", "%deposit received%")
@@ -60,7 +91,10 @@ async function evaluateOfficePot(config: ConfigMap): Promise<LedgerInsert[]> {
     .not("turnover_type", "is", null);
 
   if (error) throw new Error(`Office pot query failed: ${error.message}`);
-  if (!turnovers?.length) return [];
+  if (!rawTurnovers?.length) return [];
+
+  // Only evaluate the most recent turnover per address
+  const turnovers = deduplicateByUnit(rawTurnovers, "key_turnin_date");
 
   const turnoverIds = turnovers.map((t) => t.id);
   const existingIds = await getExistingLedgerSourceIds("turnover", turnoverIds);
@@ -106,11 +140,14 @@ async function evaluateOfficePot(config: ConfigMap): Promise<LedgerInsert[]> {
 /**
  * Evaluates the tech pot turnover bonuses: base amount + optional 20% kicker
  * when actual_hours <= estimated_hours.
+ *
+ * When the same address has multiple turnovers (repeat cycles), only the most
+ * recent one (by work_start_date) is evaluated to prevent stale entries.
  */
 async function evaluateTechTurnoverPot(
   config: ConfigMap
 ): Promise<LedgerInsert[]> {
-  const { data: turnovers, error } = await supabaseAdmin
+  const { data: rawTurnovers, error } = await supabaseAdmin
     .from("turnovers")
     .select("*")
     .not("work_completion_date", "is", null)
@@ -118,7 +155,10 @@ async function evaluateTechTurnoverPot(
     .not("turnover_type", "is", null);
 
   if (error) throw new Error(`Tech pot turnover query failed: ${error.message}`);
-  if (!turnovers?.length) return [];
+  if (!rawTurnovers?.length) return [];
+
+  // Only evaluate the most recent turnover per address
+  const turnovers = deduplicateByUnit(rawTurnovers, "work_start_date");
 
   const turnoverIds = turnovers.map((t) => t.id);
 

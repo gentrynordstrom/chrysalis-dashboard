@@ -161,6 +161,8 @@ interface DiagnoseResult {
     is_billed: boolean;
     key_turnin_date: string | null;
     deposit_received_date: string | null;
+    work_start_date: string | null;
+    work_completion_date: string | null;
     office_days: number | null;
     office_incentive_amount: number | null;
     status: string | null;
@@ -175,7 +177,14 @@ interface DiagnoseResult {
     reason: string;
     created_at: string;
   } | null;
-  otherMatches: { id: string; unit_name: string | null }[];
+  allMatches: {
+    id: string;
+    unit_name: string | null;
+    work_start_date: string | null;
+    key_turnin_date: string | null;
+    status: string | null;
+    isCurrent: boolean;
+  }[];
 }
 
 function DiagnoseSection() {
@@ -186,26 +195,33 @@ function DiagnoseSection() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
+  async function fetchDiagnose(params: string) {
+    const res = await adminFetch(`/api/admin/diagnose?${params}`);
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Unknown error");
+      setResult(null);
+    } else {
+      setResult(data);
+      setError(null);
+    }
+    return res.ok;
+  }
+
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     if (!query.trim()) return;
-
     setLoading(true);
-    setError(null);
-    setResult(null);
     setSyncMsg(null);
-
-    const res = await adminFetch(
-      `/api/admin/diagnose?unit=${encodeURIComponent(query.trim())}`
-    );
-    const data = await res.json();
+    await fetchDiagnose(`unit=${encodeURIComponent(query.trim())}`);
     setLoading(false);
+  }
 
-    if (!res.ok) {
-      setError(data.error ?? "Unknown error");
-    } else {
-      setResult(data);
-    }
+  async function handleSelectMatch(id: string) {
+    setLoading(true);
+    setSyncMsg(null);
+    await fetchDiagnose(`id=${encodeURIComponent(id)}`);
+    setLoading(false);
   }
 
   async function handleRerunRules() {
@@ -223,13 +239,10 @@ function DiagnoseSection() {
           : "Sync complete — no new entries (conditions may still be failing)"
       );
       // Re-run the diagnostic to show updated state
-      if (query.trim()) {
-        const recheck = await adminFetch(
-          `/api/admin/diagnose?unit=${encodeURIComponent(query.trim())}`
-        );
-        if (recheck.ok) {
-          setResult(await recheck.json());
-        }
+      if (result?.turnover.id) {
+        await fetchDiagnose(`id=${encodeURIComponent(result.turnover.id)}`);
+      } else if (query.trim()) {
+        await fetchDiagnose(`unit=${encodeURIComponent(query.trim())}`);
       }
     } else {
       setSyncMsg(`Sync error: ${data.error}`);
@@ -274,6 +287,11 @@ function DiagnoseSection() {
                 <span className="text-gray-500 text-sm ml-2 capitalize">
                   {result.turnover.turnover_type ?? "no type"}
                 </span>
+                {result.turnover.work_start_date && (
+                  <span className="text-gray-600 text-xs ml-2">
+                    started {result.turnover.work_start_date}
+                  </span>
+                )}
               </div>
               <span className="text-gray-600 text-xs">
                 Last synced:{" "}
@@ -286,13 +304,30 @@ function DiagnoseSection() {
               </span>
             </div>
 
-            {result.otherMatches.length > 0 && (
-              <p className="text-gray-500 text-xs">
-                Also matched:{" "}
-                {result.otherMatches
-                  .map((m) => m.unit_name ?? "Unknown")
-                  .join(", ")}
-              </p>
+            {/* Multiple turnovers at this address — show picker */}
+            {result.allMatches.length > 1 && (
+              <div className="bg-amber-500/5 border border-amber-500/15 rounded-lg p-3 space-y-2">
+                <p className="text-amber-400 text-xs font-medium">
+                  {result.allMatches.length} turnovers found at this address — showing the most recent. Click another to diagnose it.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {result.allMatches.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => handleSelectMatch(m.id)}
+                      disabled={loading}
+                      className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                        m.isCurrent
+                          ? "bg-white/10 border-white/20 text-white"
+                          : "bg-white/[0.03] border-white/10 text-gray-400 hover:bg-white/[0.06] hover:text-gray-200"
+                      }`}
+                    >
+                      {m.work_start_date ?? m.key_turnin_date ?? "unknown date"}
+                      {m.isCurrent && <span className="ml-1 text-amber-400">← current</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* Condition checklist */}
