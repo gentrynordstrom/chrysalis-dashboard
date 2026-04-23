@@ -199,7 +199,7 @@ function DiagnoseSection() {
   async function handleRerunRules() {
     setSyncing(true);
     setSyncMsg(null);
-    const res = await fetch("/api/sync", { method: "POST" });
+    const res = await fetch("/api/admin/sync", { method: "POST" });
     const data = await res.json();
     setSyncing(false);
 
@@ -874,7 +874,7 @@ function SyncSection() {
     setSyncing(true);
     setSyncResult(null);
 
-    const url = board ? `/api/sync?board=${board}` : "/api/sync";
+    const url = board ? `/api/admin/sync?board=${board}` : "/api/admin/sync";
     const res = await fetch(url, { method: "POST" });
     const data = await res.json();
 
