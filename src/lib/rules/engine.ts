@@ -56,6 +56,7 @@ async function evaluateOfficePot(config: ConfigMap): Promise<LedgerInsert[]> {
     .ilike("deposit_status", "%deposit received%")
     .eq("is_billed", true)
     .not("key_turnin_date", "is", null)
+    .not("deposit_received_date", "is", null)
     .not("turnover_type", "is", null);
 
   if (error) throw new Error(`Office pot query failed: ${error.message}`);

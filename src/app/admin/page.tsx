@@ -3,6 +3,18 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 
+const SESSION_TOKEN = "chrysalis_admin_authenticated";
+
+function adminFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, {
+    ...init,
+    headers: {
+      ...(init.headers ?? {}),
+      Authorization: `Bearer ${SESSION_TOKEN}`,
+    },
+  });
+}
+
 interface ConfigRow {
   id: string;
   pot: string;
@@ -26,7 +38,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/admin/config")
+    adminFetch("/api/admin/config")
       .then((r) => {
         if (r.ok) setAuthed(true);
         setLoading(false);
@@ -183,7 +195,7 @@ function DiagnoseSection() {
     setResult(null);
     setSyncMsg(null);
 
-    const res = await fetch(
+    const res = await adminFetch(
       `/api/admin/diagnose?unit=${encodeURIComponent(query.trim())}`
     );
     const data = await res.json();
@@ -199,7 +211,7 @@ function DiagnoseSection() {
   async function handleRerunRules() {
     setSyncing(true);
     setSyncMsg(null);
-    const res = await fetch("/api/admin/sync", { method: "POST" });
+    const res = await adminFetch("/api/admin/sync", { method: "POST" });
     const data = await res.json();
     setSyncing(false);
 
@@ -212,7 +224,7 @@ function DiagnoseSection() {
       );
       // Re-run the diagnostic to show updated state
       if (query.trim()) {
-        const recheck = await fetch(
+        const recheck = await adminFetch(
           `/api/admin/diagnose?unit=${encodeURIComponent(query.trim())}`
         );
         if (recheck.ok) {
@@ -392,7 +404,7 @@ function TransactionSection() {
     const endpoint =
       mode === "withdrawal" ? "/api/admin/withdrawal" : "/api/admin/adjustment";
 
-    const res = await fetch(endpoint, {
+    const res = await adminFetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -550,7 +562,7 @@ function LedgerManagement() {
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const loadEntries = useCallback(async () => {
-    const res = await fetch("/api/admin/ledger?limit=100");
+    const res = await adminFetch("/api/admin/ledger?limit=100");
     if (res.ok) {
       const data = await res.json();
       setEntries(data.entries ?? []);
@@ -564,7 +576,7 @@ function LedgerManagement() {
 
   async function handleDelete(id: string) {
     setDeletingId(id);
-    const res = await fetch("/api/admin/ledger", {
+    const res = await adminFetch("/api/admin/ledger", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
@@ -687,7 +699,7 @@ function ConfigSection() {
   const [saving, setSaving] = useState(false);
 
   const loadConfig = useCallback(async () => {
-    const res = await fetch("/api/admin/config");
+    const res = await adminFetch("/api/admin/config");
     if (res.ok) {
       const data = await res.json();
       setConfig(data.config ?? []);
@@ -711,7 +723,7 @@ function ConfigSection() {
 
   async function saveEdit(id: string) {
     setSaving(true);
-    const res = await fetch("/api/admin/config", {
+    const res = await adminFetch("/api/admin/config", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -875,7 +887,7 @@ function SyncSection() {
     setSyncResult(null);
 
     const url = board ? `/api/admin/sync?board=${board}` : "/api/admin/sync";
-    const res = await fetch(url, { method: "POST" });
+    const res = await adminFetch(url, { method: "POST" });
     const data = await res.json();
 
     setSyncing(false);
