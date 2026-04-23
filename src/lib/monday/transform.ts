@@ -84,26 +84,34 @@ function extractRating(item: MondayItem, columnId: string): number | null {
 
 function extractBoolean(item: MondayItem, columnId: string): boolean {
   const cv = getColumnValue(item, columnId);
-  if (!cv?.value) return false;
+  if (!cv?.value) {
+    // value is null — still check text (handles status-column "Yes"/"v" labels)
+    const text = cv?.text?.toLowerCase().trim() ?? "";
+    return text === "true" || text === "yes" || text === "v";
+  }
 
   try {
     const parsed = JSON.parse(cv.value);
-    return parsed.checked === true || parsed.checked === "true";
+    if (parsed.checked === true || parsed.checked === "true") return true;
   } catch {
-    const text = cv.text?.toLowerCase() ?? "";
-    return text === "true" || text === "yes" || text === "v";
+    // fall through to text check
   }
+
+  // Fallback: covers status columns, text columns, or unexpected value formats
+  const text = cv.text?.toLowerCase().trim() ?? "";
+  return text === "true" || text === "yes" || text === "v";
 }
 
 function extractStatusLabel(item: MondayItem, columnId: string): string | null {
   const cv = getColumnValue(item, columnId);
-  if (!cv?.value) return cv?.text ?? null;
+  if (!cv?.value) return cv?.text?.trim() || null;
 
   try {
     const parsed = JSON.parse(cv.value);
-    return parsed.label ?? cv.text ?? null;
+    const label = parsed.label ?? cv.text ?? null;
+    return label?.trim() || null;
   } catch {
-    return cv.text ?? null;
+    return cv.text?.trim() || null;
   }
 }
 
@@ -174,8 +182,10 @@ function calculateSubitemsTime(item: MondayItem): number | null {
 }
 
 export function transformTurnover(item: MondayItem): TurnoverRecord {
-  const typeText = extractText(item, TURNOVER_COLUMNS.turnover_type);
-  const turnoverType = typeText ? (TURNOVER_TYPE_MAP[typeText] ?? null) : null;
+  const typeText = extractText(item, TURNOVER_COLUMNS.turnover_type)?.trim() ?? null;
+  const turnoverType = typeText
+    ? (TURNOVER_TYPE_MAP[typeText] ?? TURNOVER_TYPE_MAP[typeText.toLowerCase()] ?? null)
+    : null;
 
   return {
     monday_item_id: Number(item.id),

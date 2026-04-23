@@ -122,12 +122,257 @@ export default function AdminPage() {
       </header>
 
       <main className="px-6 py-8 max-w-5xl mx-auto space-y-10">
+        <DiagnoseSection />
         <TransactionSection />
         <LedgerManagement />
         <ConfigSection />
         <SyncSection />
       </main>
     </div>
+  );
+}
+
+interface DiagnoseCondition {
+  label: string;
+  passed: boolean;
+  actual: string;
+  expected: string;
+}
+
+interface DiagnoseResult {
+  turnover: {
+    id: string;
+    monday_item_id: number;
+    unit_name: string | null;
+    turnover_type: string | null;
+    deposit_status: string | null;
+    is_billed: boolean;
+    key_turnin_date: string | null;
+    deposit_received_date: string | null;
+    office_days: number | null;
+    office_incentive_amount: number | null;
+    status: string | null;
+    updated_at: string;
+  };
+  config: { day_threshold: number; amount: number } | null;
+  conditions: DiagnoseCondition[];
+  allPassed: boolean;
+  existingLedgerEntry: {
+    id: string;
+    amount: number;
+    reason: string;
+    created_at: string;
+  } | null;
+  otherMatches: { id: string; unit_name: string | null }[];
+}
+
+function DiagnoseSection() {
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<DiagnoseResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!query.trim()) return;
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    setSyncMsg(null);
+
+    const res = await fetch(
+      `/api/admin/diagnose?unit=${encodeURIComponent(query.trim())}`
+    );
+    const data = await res.json();
+    setLoading(false);
+
+    if (!res.ok) {
+      setError(data.error ?? "Unknown error");
+    } else {
+      setResult(data);
+    }
+  }
+
+  async function handleRerunRules() {
+    setSyncing(true);
+    setSyncMsg(null);
+    const res = await fetch("/api/sync", { method: "POST" });
+    const data = await res.json();
+    setSyncing(false);
+
+    if (res.ok) {
+      const newEntries = data.rulesResult?.totalNewEntries ?? 0;
+      setSyncMsg(
+        newEntries > 0
+          ? `Sync complete — ${newEntries} new ledger entries created`
+          : "Sync complete — no new entries (conditions may still be failing)"
+      );
+      // Re-run the diagnostic to show updated state
+      if (query.trim()) {
+        const recheck = await fetch(
+          `/api/admin/diagnose?unit=${encodeURIComponent(query.trim())}`
+        );
+        if (recheck.ok) {
+          setResult(await recheck.json());
+        }
+      }
+    } else {
+      setSyncMsg(`Sync error: ${data.error}`);
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="text-lg font-semibold text-gray-200 mb-4">
+        Turnover Diagnostics
+      </h2>
+      <div className="bg-white/[0.03] border border-white/5 rounded-xl p-5 space-y-5">
+        <form onSubmit={handleSearch} className="flex gap-3">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by unit name (e.g. 2417 Circle)"
+            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-sm"
+          />
+          <button
+            type="submit"
+            disabled={loading || !query.trim()}
+            className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-medium px-5 py-2.5 rounded-lg text-sm transition-colors shrink-0"
+          >
+            {loading ? "Checking..." : "Diagnose"}
+          </button>
+        </form>
+
+        {error && (
+          <p className="text-red-400 text-sm">{error}</p>
+        )}
+
+        {result && (
+          <div className="space-y-4">
+            {/* Turnover summary */}
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-white font-medium">
+                  {result.turnover.unit_name ?? "Unknown"}
+                </span>
+                <span className="text-gray-500 text-sm ml-2 capitalize">
+                  {result.turnover.turnover_type ?? "no type"}
+                </span>
+              </div>
+              <span className="text-gray-600 text-xs">
+                Last synced:{" "}
+                {new Date(result.turnover.updated_at).toLocaleString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+
+            {result.otherMatches.length > 0 && (
+              <p className="text-gray-500 text-xs">
+                Also matched:{" "}
+                {result.otherMatches
+                  .map((m) => m.unit_name ?? "Unknown")
+                  .join(", ")}
+              </p>
+            )}
+
+            {/* Condition checklist */}
+            <div className="space-y-1.5">
+              {result.conditions.map((c, i) => (
+                <div
+                  key={i}
+                  className={`flex items-start gap-3 py-2 px-3 rounded-lg text-sm ${
+                    c.passed
+                      ? "bg-emerald-500/5 border border-emerald-500/10"
+                      : "bg-red-500/5 border border-red-500/10"
+                  }`}
+                >
+                  <span className="shrink-0 mt-0.5">
+                    {c.passed ? (
+                      <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <div className={c.passed ? "text-emerald-300" : "text-red-300"}>
+                      {c.label}
+                    </div>
+                    <div className="text-gray-500 text-xs mt-0.5">
+                      Actual: <span className="text-gray-400">{c.actual}</span>
+                      {!c.passed && (
+                        <>
+                          {" — "}Expected: <span className="text-gray-400">{c.expected}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Summary + action */}
+            <div className="flex items-center justify-between pt-2 border-t border-white/5">
+              <div>
+                {result.allPassed && !result.existingLedgerEntry ? (
+                  <span className="text-amber-400 text-sm">
+                    All conditions pass but no ledger entry exists — try re-running sync
+                  </span>
+                ) : result.existingLedgerEntry ? (
+                  <span className="text-emerald-400 text-sm">
+                    Bonus already recorded: ${Number(result.existingLedgerEntry.amount).toFixed(2)}
+                  </span>
+                ) : (
+                  <span className="text-red-400 text-sm">
+                    {result.conditions.filter((c) => !c.passed).length} condition(s) failing
+                  </span>
+                )}
+              </div>
+              {result.allPassed && !result.existingLedgerEntry && (
+                <button
+                  onClick={handleRerunRules}
+                  disabled={syncing}
+                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors"
+                >
+                  {syncing ? "Syncing..." : "Re-run Sync + Rules"}
+                </button>
+              )}
+            </div>
+
+            {syncMsg && (
+              <p
+                className={`text-sm ${
+                  syncMsg.includes("error") ? "text-red-400" : "text-emerald-400"
+                }`}
+              >
+                {syncMsg}
+              </p>
+            )}
+
+            {/* Raw DB values (collapsible) */}
+            <details className="group">
+              <summary className="text-gray-500 text-xs cursor-pointer hover:text-gray-300 transition-colors">
+                Show raw database values
+              </summary>
+              <div className="mt-2 bg-black/30 rounded-lg p-3 text-xs font-mono text-gray-400 overflow-x-auto">
+                <pre>{JSON.stringify(result.turnover, null, 2)}</pre>
+              </div>
+            </details>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
